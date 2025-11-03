@@ -3,6 +3,7 @@ Handler: create payment transaction
 SPDX - License - Identifier: LGPL - 3.0 - or -later
 Auteurs : Gabriel C. Ullmann, Fabio Petrillo, 2025
 """
+import config
 import requests
 from logger import Logger
 from handlers.handler import Handler
@@ -21,30 +22,48 @@ class CreatePaymentHandler(Handler):
     def run(self):
         """Call payment microservice to generate payment transaction"""
         try:
-            # TODO: effectuer une requête à /orders pour obtenir le total_amount de la commande (que sera utilisé pour démander la transaction de paiement)
-            """
-            GET my-api-gateway-address/order/{id} ...
-            """
+            # Récupérer le montant total de la commande
+            response = requests.get(f'{config.API_GATEWAY_URL}/store-manager-api/orders/{self.order_id}')
+            if response.ok:
+                data = response.json()
+                self.total_amount = data.get("total_amount", 0)
+            else:
+                text = response.json()
+                self.logger.error(f"Erreur {response.status_code} lors de la récupération du montant total : {text}")
+                return OrderSagaState.INCREASING_STOCK
 
-            # TODO: effectuer une requête à /payments pour créer une transaction de paiement
-            """
-            POST my-api-gateway-address/payments ...
-            json={ voir collection Postman pour en savoir plus ... }
-            """
-            response_ok = True
-            if response_ok:
+            # Créer une transaction de paiement
+            response = requests.post(f'{config.API_GATEWAY_URL}/store-manager-api/payments',
+                json={
+                    "order_id": self.order_id,
+                    "amount": self.total_amount,
+                    "payment_method": self.order_data.get("payment_method", "credit_card")
+                },
+                headers={'Content-Type': 'application/json'}
+            )
+            if response.ok:
                 self.logger.debug("La création d'une transaction de paiement a réussi")
                 return OrderSagaState.COMPLETED
             else:
-                self.logger.error(f"Erreur : {response_ok}")
+                text = response.json()
+                self.logger.error(f"Erreur {response.status_code} : {text}")
                 return OrderSagaState.INCREASING_STOCK
 
         except Exception as e:
             self.logger.error("La création d'une transaction de paiement a échoué : " + str(e))
             return OrderSagaState.INCREASING_STOCK
-        
+
     def rollback(self):
         """Call payment microservice to delete payment transaction"""
-        # ATTENTION: Nous pourrions utiliser cette méthode si nous avions des étapes supplémentaires, mais ce n'est pas le cas actuellement, elle restera donc INUTILISÉE.
-        self.logger.debug("La suppression d'une transaction de paiement a réussi")
-        return OrderSagaState.INCREASING_STOCK
+        try:
+            response = requests.delete(f'{config.API_GATEWAY_URL}/store-manager-api/payments/order/{self.order_id}')
+            if response.ok:
+                self.logger.debug("La suppression d'une transaction de paiement a réussi")
+                return OrderSagaState.INCREASING_STOCK
+            else:
+                text = response.json()
+                self.logger.error(f"Erreur {response.status_code} : {text}")
+                return OrderSagaState.INCREASING_STOCK
+        except Exception as e:
+            self.logger.error("La suppression d'une transaction de paiement a échoué : " + str(e))
+            return OrderSagaState.INCREASING_STOCK
