@@ -22,22 +22,27 @@ class CreatePaymentHandler(Handler):
     def run(self):
         """Call payment microservice to generate payment transaction"""
         try:
-            # Récupérer le montant total de la commande
+            # Récupérer le montant total de la commande et le user_id
             response = requests.get(f'{config.API_GATEWAY_URL}/store-manager-api/orders/{self.order_id}')
             if response.ok:
                 data = response.json()
                 self.total_amount = data.get("total_amount", 0)
+                user_id = data.get("user_id")
+                
+                if not user_id:
+                    self.logger.error("user_id manquant dans les données de la commande")
+                    return OrderSagaState.INCREASING_STOCK
             else:
                 text = response.json()
                 self.logger.error(f"Erreur {response.status_code} lors de la récupération du montant total : {text}")
                 return OrderSagaState.INCREASING_STOCK
 
-            # Créer une transaction de paiement
-            response = requests.post(f'{config.API_GATEWAY_URL}/store-manager-api/payments',
+            # Créer une transaction de paiement via l'API Gateway
+            response = requests.post(f'{config.API_GATEWAY_URL}/payments-api/payments',
                 json={
                     "order_id": self.order_id,
-                    "amount": self.total_amount,
-                    "payment_method": self.order_data.get("payment_method", "credit_card")
+                    "user_id": user_id,
+                    "total_amount": self.total_amount
                 },
                 headers={'Content-Type': 'application/json'}
             )
