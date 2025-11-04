@@ -45,9 +45,10 @@ def health():
 
 @app.post('/saga/order')
 def saga_order():
-    """ Start order saga """
-    order_saga_controller = OrderSagaController()
-    result = order_saga_controller.run(request)
+    with tracer.start_as_current_span("put_orders"):
+        """ Start order saga """
+        order_saga_controller = OrderSagaController()
+        result = order_saga_controller.run(request)
 
     if result["status"] == "OK":
         return jsonify(result), 200
