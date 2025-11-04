@@ -20,7 +20,7 @@ class DecreaseStockHandler(Handler):
     def run(self):
         """Call StoreManager to check out from stock"""
         try:
-            response = requests.post(f'{config.API_GATEWAY_URL}/store-manager-api/stocks',
+            response = requests.put(f'{config.API_GATEWAY_URL}/store-manager-api/stocks',
                 json={
                     "items": self.order_item_data,
                     "operation": "-"
@@ -31,7 +31,10 @@ class DecreaseStockHandler(Handler):
                 self.logger.debug("La sortie des articles du stock a réussi")
                 return OrderSagaState.CREATING_PAYMENT
             else:
-                text = response.json()
+                try:
+                    text = response.json()
+                except:
+                    text = response.text
                 self.logger.error(f"Erreur {response.status_code} : {text}")
                 return OrderSagaState.CANCELLING_ORDER
         except Exception as e:
@@ -41,7 +44,7 @@ class DecreaseStockHandler(Handler):
     def rollback(self):
         """Call StoreManager to revert stock check out"""
         try:
-            response = requests.post(f'{config.API_GATEWAY_URL}/store-manager-api/stocks',
+            response = requests.put(f'{config.API_GATEWAY_URL}/store-manager-api/stocks',
                 json={
                     "items": self.order_item_data,
                     "operation": "+"
